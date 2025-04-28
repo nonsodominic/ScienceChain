@@ -273,3 +273,86 @@
     (ok true)
   )
 )
+
+;; Check if a project is eligible for refund
+(define-private (is-refund-eligible (project { research-id: uint }))
+  (let
+    (
+      (project-data (unwrap-panic (map-get? research-projects project)))
+    )
+    (or
+      (and
+        (< (get current-funding project-data) (get funding-goal project-data))
+        (> block-height (get end-date project-data))
+      )
+      (is-eq (get status project-data) STATUS_COMPLETED)
+    )
+  )
+)
+
+;; Request a refund for a project
+(define-public (request-refund (research-id uint))
+  (begin
+    (asserts! (is-valid-research-id research-id) ERR_INVALID_RESEARCH_ID)
+    (let
+      (
+        (project (unwrap-panic (map-get? research-projects { research-id: research-id })))
+        (contribution (unwrap-panic (map-get? project-contributions { research-id: research-id, contributor: tx-sender })))
+      )
+      (asserts! (is-refund-eligible { research-id: research-id }) ERR_REFUND_NOT_AVAILABLE)
+      (asserts! (> (get amount contribution) u0) ERR_NOT_CONTRIBUTOR)
+      (try! (as-contract (stx-transfer? (get amount contribution) tx-sender tx-sender)))
+      (map-delete project-contributions { research-id: research-id, contributor: tx-sender })
+      (map-set research-projects
+        { research-id: research-id }
+        (merge project { 
+          current-funding: (- (get current-funding project) (get amount contribution)),
+          status: STATUS_REFUNDABLE
+        })
+      )
+      (ok true)
+    )
+  )
+)
+
+;; Read-only functions
+
+;; Get project details
+(define-read-only (get-research-details (research-id uint))
+  (map-get? research-projects { research-id: research-id })
+)
+
+;; Get total number of projects
+(define-read-only (get-research-count)
+  (var-get research-counter)
+)
+
+;; Get contribution amount for a specific project and contributor
+(define-read-only (get-contribution (research-id uint) (contributor principal))
+  (map-get? project-contributions { research-id: research-id, contributor: contributor })
+)
+
+;; Get project status
+(define-read-only (get-research-status (research-id uint))
+  (get status (unwrap-panic (map-get? research-projects { research-id: research-id })))
+)
+
+;; Check if an account is a reviewer
+(define-read-only (is-active-reviewer (account principal))
+  (is-reviewer account)
+)
+
+;; Get minimum reviews required
+(define-read-only (get-minimum-reviews)
+  (var-get minimum-reviews)
+)
+
+;; Get funding period
+(define-read-only (get-funding-period)
+  (var-get funding-period)
+)
+
+;; Check if a project is eligible for refund
+(define-read-only (check-refund-eligibility (research-id uint))
+  (is-refund-eligible { research-id: research-id })
+)
