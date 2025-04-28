@@ -195,3 +195,81 @@
   )
 )
 
+;; Withdraw funds for a fully funded project (only by the researcher)
+(define-public (withdraw-funds (research-id uint))
+  (begin
+    (asserts! (is-valid-research-id research-id) ERR_INVALID_RESEARCH_ID)
+    (let
+      (
+        (project (unwrap-panic (map-get? research-projects { research-id: research-id })))
+      )
+      (asserts! (is-eq (get researcher project) tx-sender) ERR_UNAUTHORIZED)
+      (asserts! (is-eq (get status project) STATUS_FUNDED) ERR_INVALID_STATUS)
+      (try! (as-contract (stx-transfer? (get current-funding project) tx-sender (get researcher project))))
+      (map-set research-projects
+        { research-id: research-id }
+        (merge project { current-funding: u0, status: STATUS_COMPLETED })
+      )
+      (ok true)
+    )
+  )
+)
+
+;; Update project status (only by CONTRACT_ADMIN)
+(define-public (update-research-status (research-id uint) (new-status uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_ADMIN) ERR_UNAUTHORIZED)
+    (asserts! (is-valid-research-id research-id) ERR_INVALID_RESEARCH_ID)
+    (asserts! (is-valid-status new-status) ERR_INVALID_STATUS)
+    (let
+      (
+        (project (unwrap-panic (map-get? research-projects { research-id: research-id })))
+      )
+      (map-set research-projects
+        { research-id: research-id }
+        (merge project { status: new-status })
+      )
+      (ok true)
+    )
+  )
+)
+
+;; Add a reviewer (only by CONTRACT_ADMIN)
+(define-public (add-reviewer (reviewer principal))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_ADMIN) ERR_UNAUTHORIZED)
+    (asserts! (not (is-eq reviewer CONTRACT_ADMIN)) ERR_INVALID_REVIEWER)
+    (map-set reviewers { reviewer: reviewer } { is-active: true })
+    (ok true)
+  )
+)
+
+;; Remove a reviewer (only by CONTRACT_ADMIN)
+(define-public (remove-reviewer (reviewer principal))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_ADMIN) ERR_UNAUTHORIZED)
+    (asserts! (not (is-eq reviewer CONTRACT_ADMIN)) ERR_INVALID_REVIEWER)
+    (map-delete reviewers { reviewer: reviewer })
+    (ok true)
+  )
+)
+
+;; Set minimum reviews required (only by CONTRACT_ADMIN)
+(define-public (set-minimum-reviews (new-minimum-reviews uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_ADMIN) ERR_UNAUTHORIZED)
+    (asserts! (> new-minimum-reviews u0) ERR_INVALID_CONTRIBUTION)
+    (var-set minimum-reviews new-minimum-reviews)
+    (ok true)
+  )
+)
+
+;; Set funding period (only by CONTRACT_ADMIN)
+(define-public (set-funding-period (new-funding-period uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_ADMIN) ERR_UNAUTHORIZED)
+    (asserts! (> new-funding-period u0) ERR_INVALID_CONTRIBUTION)
+    (var-set funding-period new-funding-period)
+    (ok true)
+  )
+)
